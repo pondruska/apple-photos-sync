@@ -28,7 +28,7 @@ entry point.
 ## Use
 
 ```bash
-./apple-photos-sync --dry-run "/Users/peter/Desktop/Muir woods"
+./apple-photos-sync --dry-run ~/Pictures/Exports/iceland-2026
 ```
 
 ```
@@ -45,7 +45,7 @@ Then drop `--dry-run` to write.
 | `--dry-run`, `-n` | report matches, write nothing |
 | `--force` | rewrite even when the asset already holds this exact render |
 | `--revert` | revert the matched assets to their originals — the undo button |
-| `--verbose`, `-v` | print each asset's local identifier |
+| `--verbose`, `-v` | print each asset's local identifier, and the render formats PhotoKit accepts |
 | `--log <file>` | mirror output to a file |
 
 Re-running is safe: each write records the render's SHA-256 in its adjustment data, so an
@@ -89,7 +89,7 @@ PhotoKit writes to the **System Photo Library** — the one Photos.app opens by 
 ## Undo
 
 ```bash
-./apple-photos-sync --revert "/Users/peter/Desktop/Muir woods"
+./apple-photos-sync --revert ~/Pictures/Exports/iceland-2026
 ```
 
 Equivalent to selecting the photos in Photos.app and choosing *Image → Revert to Original*.
