@@ -22,13 +22,6 @@ trap 'rm -f "$log"' EXIT
 
 open -a "$app" --args "$@" --log "$log"
 
-# Wait for the process to appear (it may already have exited on a fast error).
-i=0
-while [ $i -lt 50 ] && ! pgrep -qf "ApplePhotosSync.app/Contents/MacOS/apple-photos-sync"; do
-	i=$((i + 1))
-	sleep 0.1
-done
-
 # Poll the log rather than backgrounding `tail -f`: an orphaned tail would keep
 # this script's stdout open after we exit, hanging whoever called us.
 next=1
@@ -40,8 +33,39 @@ drain() {
 	fi
 }
 
-while pgrep -qf "ApplePhotosSync.app/Contents/MacOS/apple-photos-sync"; do
+running() {
+	pgrep -qf "ApplePhotosSync.app/Contents/MacOS/apple-photos-sync"
+}
+
+# Completion is the "##exit" marker in the log, not the process disappearing:
+# a cold launch can take seconds to show up in pgrep, and waiting on a fixed
+# appearance window loses the whole run when it does. Only conclude the process
+# died without finishing once we have actually seen it running.
+seen=0
+waited=0
+while :; do
 	drain
+	if grep -q '^##exit ' "$log"; then
+		break
+	fi
+	if running; then
+		seen=1
+	elif [ "$seen" = 0 ]; then
+		# Never showed up at all: bound the wait so a failed launch cannot hang.
+		waited=$((waited + 1))
+		if [ $waited -gt 200 ]; then
+			echo "apple-photos-sync: app did not start" >&2
+			exit 1
+		fi
+	else
+		sleep 0.5
+		drain
+		grep -q '^##exit ' "$log" || {
+			echo "apple-photos-sync: exited without finishing" >&2
+			exit 1
+		}
+		break
+	fi
 	sleep 0.3
 done
 drain
