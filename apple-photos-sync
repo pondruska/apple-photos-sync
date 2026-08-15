@@ -1,0 +1,50 @@
+#!/bin/sh
+# Launches the tool through `open -a` rather than executing it directly.
+#
+# TCC attributes a directly-executed binary to whatever process started the
+# shell, so Photos access gets decided for *that* process — which usually means
+# an instant denial with no prompt. Going through `open` makes launchd the
+# parent, so the app is judged on its own bundle identity and can prompt.
+# stdout is discarded in that case, hence --log plus a tail.
+set -e
+
+here=$(cd "$(dirname "$0")" && pwd)
+app="$here/ApplePhotosSync.app"
+bin="$app/Contents/MacOS/apple-photos-sync"
+
+if [ ! -x "$bin" ]; then
+	echo "apple-photos-sync: not built yet — run 'make' in $here" >&2
+	exit 1
+fi
+
+log=$(mktemp -t apple-photos-sync)
+trap 'rm -f "$log"' EXIT
+
+open -a "$app" --args "$@" --log "$log"
+
+# Wait for the process to appear (it may already have exited on a fast error).
+i=0
+while [ $i -lt 50 ] && ! pgrep -qf "ApplePhotosSync.app/Contents/MacOS/apple-photos-sync"; do
+	i=$((i + 1))
+	sleep 0.1
+done
+
+# Poll the log rather than backgrounding `tail -f`: an orphaned tail would keep
+# this script's stdout open after we exit, hanging whoever called us.
+next=1
+drain() {
+	total=$(wc -l <"$log" | tr -d ' ')
+	if [ "$total" -ge "$next" ]; then
+		sed -n "${next},\$p" "$log" | grep -v '^##exit ' || true
+		next=$((total + 1))
+	fi
+}
+
+while pgrep -qf "ApplePhotosSync.app/Contents/MacOS/apple-photos-sync"; do
+	drain
+	sleep 0.3
+done
+drain
+
+status=$(sed -n 's/^##exit //p' "$log" | tail -1)
+exit "${status:-1}"
