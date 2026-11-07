@@ -24,13 +24,20 @@ open -a "$app" --args "$@" --log "$log"
 
 # Poll the log rather than backgrounding `tail -f`: an orphaned tail would keep
 # this script's stdout open after we exit, hanging whoever called us.
+# wc -l counts newlines, so only lines 1..total are complete; a trailing
+# partial line is left for the next drain, or it would be printed twice.
 next=1
 drain() {
 	total=$(wc -l <"$log" | tr -d ' ')
 	if [ "$total" -ge "$next" ]; then
-		sed -n "${next},\$p" "$log" | grep -v '^##exit ' || true
+		sed -n "${next},${total}p" "$log" | grep -v '^##exit ' || true
 		next=$((total + 1))
 	fi
+}
+
+# After the run, flush whatever is left, including an unterminated last line.
+drain_rest() {
+	sed -n "${next},\$p" "$log" | grep -v '^##exit ' || true
 }
 
 running() {
@@ -68,7 +75,7 @@ while :; do
 	fi
 	sleep 0.3
 done
-drain
+drain_rest
 
 status=$(sed -n 's/^##exit //p' "$log" | tail -1)
 exit "${status:-1}"
